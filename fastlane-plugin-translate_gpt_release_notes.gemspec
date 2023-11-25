@@ -4,7 +4,7 @@ require 'fastlane/plugin/translate_gpt/version'
 
 Gem::Specification.new do |spec|
   spec.name          = 'fastlane-plugin-translate_gpt_release_notes'
-  spec.version       = Fastlane::TranslateGptReleaseNotes::VERSION
+  spec.version       = '0.0.1'
   spec.author        = 'Anton Karliner'
   spec.email         = 'anton@karliner.pro'
 
