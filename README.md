@@ -1,6 +1,8 @@
 ![logo](images/logo.png)
 
 # translate-gpt-release-notes plugin
+[![fastlane Plugin Badge](https://rawcdn.githack.com/fastlane/fastlane/master/fastlane/assets/plugin-badge.svg)](https://rubygems.org/gems/fastlane-plugin-translate_gpt_release_notes)
+[![Gem Version](https://badge.fury.io/rb/fastlane-plugin-translate_gpt_release_notes.svg)](https://badge.fury.io/rb/fastlane-plugin-translate_gpt_release_notes)
 
 ## Getting Started
 
