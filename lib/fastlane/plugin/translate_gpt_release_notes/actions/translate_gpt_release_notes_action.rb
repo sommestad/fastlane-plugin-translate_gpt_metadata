@@ -1,11 +1,15 @@
 require 'fastlane/action'
 require 'openai'
 require_relative '../helper/translate_gpt_release_notes_helper'
+require 'fileutils'
 
 module Fastlane
   module Actions
     class TranslateGptReleaseNotesAction < Action
       def self.run(params)
+        # Define the path for the last run time file
+        last_run_file = "last_successful_run.txt"
+
         # Determine if iOS or Android based on the platform
         is_ios = params[:platform] == 'ios'
         base_directory = is_ios ? 'fastlane/metadata' : 'fastlane/metadata/android'
@@ -17,7 +21,23 @@ module Fastlane
         end
 
         locales = list_locales(base_directory)
-        master_texts = fetch_master_texts(base_directory, params[:master_locale], is_ios)
+        master_texts, master_file_path = fetch_master_texts(base_directory, params[:master_locale], is_ios)
+
+        # Skip translation if master texts are not found
+        unless master_texts && master_file_path
+          UI.message("Master file not found, skipping translation.")
+          return
+        end
+        
+        # Compare last modification time with the last run time
+        if File.exist?(last_run_file) && File.exist?(master_file_path)
+          last_run_time = File.read(last_run_file).to_i
+          file_mod_time = File.mtime(master_file_path).to_i
+          if file_mod_time <= last_run_time
+            UI.message("No changes in source file detected, translation skipped.")
+            return
+          end
+        end
 
         helper = Helper::TranslateGptReleaseNotesHelper.new(params)
         translated_texts = locales.each_with_object({}) do |locale, translations|
@@ -26,6 +46,9 @@ module Fastlane
         end
 
         update_translated_texts(base_directory, translated_texts, is_ios, params)
+
+        # Store the current time as the last run time
+        File.write(last_run_file, Time.now.to_i)
       end
 
       def self.list_locales(base_directory)
@@ -38,20 +61,21 @@ module Fastlane
         # Check if the master path exists
         unless Dir.exist?(master_path)
           UI.error("Master path does not exist: #{master_path}")
-          return nil
+          return [nil, nil]
         end
       
         filename = is_ios ? 'release_notes.txt' : highest_numbered_file(master_path)
+        file_path = File.join(master_path, filename)
       
         # Check if the file exists before reading
-        file_path = File.join(master_path, filename)
         unless File.exist?(file_path)
           UI.error("File does not exist: #{file_path}")
-          return nil
+          return [nil, nil]
         end
       
-        File.read(file_path)
-      end      
+        [File.read(file_path), file_path]
+      end
+        
 
       def self.highest_numbered_file(directory)
         Dir[File.join(directory, '*.txt')].max_by { |f| File.basename(f, '.txt').to_i }.split('/').last
@@ -72,7 +96,6 @@ module Fastlane
           File.write(File.join(target_path, filename), text)
         end
       end
-      
 
       def self.description
         "Translate release notes or changelogs for iOS and Android apps using OpenAI's GPT API"
