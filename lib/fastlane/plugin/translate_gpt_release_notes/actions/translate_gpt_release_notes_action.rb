@@ -115,7 +115,7 @@ module Fastlane
             key: :model_name,
             env_name: "GPT_MODEL_NAME",
             description: "Name of the ChatGPT model to use",
-            default_value: "gpt-4-1106-preview"
+            default_value: "gpt-4-turbo-preview"
           ),
           FastlaneCore::ConfigItem.new(
             key: :request_timeout,
