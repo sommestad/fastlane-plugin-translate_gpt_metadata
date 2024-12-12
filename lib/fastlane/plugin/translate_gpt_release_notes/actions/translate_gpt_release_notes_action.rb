@@ -8,7 +8,7 @@ module Fastlane
     class TranslateGptReleaseNotesAction < Action
       def self.run(params)
         # Define the path for the last run time file
-        last_run_file = "last_successful_run.txt"
+        last_run_file = "last_successful_run_#{params[:input_file]}"
 
         # Determine if iOS or Android based on the platform
         is_ios = params[:platform] == 'ios'
