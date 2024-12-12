@@ -21,27 +21,28 @@ module Fastlane
         end
 
         locales = list_locales(base_directory)
-        master_texts, master_file_path = fetch_master_texts(base_directory, params[:master_locale], is_ios)
+        master_texts, master_file_path = fetch_master_texts(base_directory, params[:master_locale], is_ios, params[:input_file])
 
         # Skip translation if master texts are not found
         unless master_texts && master_file_path
           UI.message("Master file not found, skipping translation.")
           return
         end
-        
+
         # Compare last modification time with the last run time
         if File.exist?(last_run_file) && File.exist?(master_file_path)
           last_run_time = File.read(last_run_file).to_i
           file_mod_time = File.mtime(master_file_path).to_i
           if file_mod_time <= last_run_time
-            UI.message("No changes in source file detected, translation skipped.")
+            UI.message("No changes in source file (#{master_file_path}) detected, translation skipped.")
             return
           end
         end
 
         helper = Helper::TranslateGptReleaseNotesHelper.new(params)
         translated_texts = locales.each_with_object({}) do |locale, translations|
-          next if locale == params[:master_locale]  # Skip master locale
+          next if locale == params[:master_locale] # Skip master locale
+
           translations[locale] = helper.translate_text(master_texts, locale, params[:platform])
         end
 
@@ -52,48 +53,46 @@ module Fastlane
       end
 
       def self.list_locales(base_directory)
-        Dir.children(base_directory).select { |entry| File.directory?(File.join(base_directory, entry)) }
+        Dir.children(base_directory).select do |entry|
+          File.directory?(File.join(base_directory, entry)) && entry != 'review_information'
+        end
       end
 
-      def self.fetch_master_texts(base_directory, master_locale, is_ios)
+      def self.fetch_master_texts(base_directory, master_locale, is_ios, input_file)
         master_path = is_ios ? File.join(base_directory, master_locale) : File.join(base_directory, master_locale, 'changelogs')
-      
+
         # Check if the master path exists
         unless Dir.exist?(master_path)
           UI.error("Master path does not exist: #{master_path}")
           return [nil, nil]
         end
-      
-        filename = is_ios ? 'release_notes.txt' : highest_numbered_file(master_path)
-        file_path = File.join(master_path, filename)
-      
+
+        file_path = File.join(master_path, input_file)
+
         # Check if the file exists before reading
         unless File.exist?(file_path)
           UI.error("File does not exist: #{file_path}")
           return [nil, nil]
         end
-      
+
         [File.read(file_path), file_path]
       end
-        
 
       def self.highest_numbered_file(directory)
         Dir[File.join(directory, '*.txt')].max_by { |f| File.basename(f, '.txt').to_i }.split('/').last
-      end      
+      end
 
       def self.update_translated_texts(base_directory, translated_texts, is_ios, params)
         translated_texts.each do |locale, text|
-          next if locale == params[:master_locale]  # Skip master locale
-      
+          next if locale == params[:master_locale] # Skip master locale
+
           target_path = is_ios ? File.join(base_directory, locale) : File.join(base_directory, locale, 'changelogs')
-      
+
           # Ensure target path exists or create it
           FileUtils.mkdir_p(target_path) unless Dir.exist?(target_path)
-      
-          filename = is_ios ? 'release_notes.txt' : highest_numbered_file(File.join(base_directory, params[:master_locale], 'changelogs'))
-      
+
           # Write the translated text to the file
-          File.write(File.join(target_path, filename), text)
+          File.write(File.join(target_path, params[:input_file]), text)
         end
       end
 
@@ -143,7 +142,7 @@ module Fastlane
             key: :platform,
             env_name: "PLATFORM",
             description: "Platform for which to translate (ios or android)",
-            is_string: true, 
+            is_string: true,
             default_value: 'ios'
           ),
           FastlaneCore::ConfigItem.new(
@@ -152,7 +151,14 @@ module Fastlane
             description: "Context for translation to improve accuracy",
             optional: true,
             type: String
-          )
+          ),
+          FastlaneCore::ConfigItem.new(
+            key: :input_file,
+            env_name: "INPUT_FILE_NAME",
+            description: "The name of the file to translate (e.g., release_notes.txt, description.txt)",
+            type: String,
+            default_value: "release_notes.txt" # Default to release notes
+          ),
         ]
       end
 
@@ -165,7 +171,7 @@ module Fastlane
 
       def self.return_value
         nil
-      end      
+      end
 
       def self.authors
         ["antonkarliner"]
@@ -173,7 +179,7 @@ module Fastlane
 
       def self.is_supported?(platform)
         [:ios, :android].include?(platform)
-      end      
+      end
     end
   end
 end
