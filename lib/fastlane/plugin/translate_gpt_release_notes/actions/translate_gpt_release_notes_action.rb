@@ -43,7 +43,7 @@ module Fastlane
         translated_texts = locales.each_with_object({}) do |locale, translations|
           next if locale == params[:master_locale] # Skip master locale
 
-          translations[locale] = helper.translate_text(master_texts, locale, params[:platform])
+          translations[locale] = helper.translate_text(master_texts, locale, params[:platform], params[:max_chars])
         end
 
         update_translated_texts(base_directory, translated_texts, is_ios, params)
@@ -157,8 +157,15 @@ module Fastlane
             env_name: "INPUT_FILE_NAME",
             description: "The name of the file to translate (e.g., release_notes.txt, description.txt)",
             type: String,
-            default_value: "release_notes.txt" # Default to release notes
+            default_value: "release_notes.txt"
           ),
+          FastlaneCore::ConfigItem.new(
+            key: :max_chars,
+            env_name: "GPT_MAX_CHARS",
+            description: "Maximum character count for each translation",
+            type: Integer,
+            optional: true
+          )
         ]
       end
 

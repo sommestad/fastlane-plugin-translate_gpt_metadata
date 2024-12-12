@@ -16,14 +16,18 @@ module Fastlane
       end
 
       # Request a translation from the GPT API
-      def translate_text(text, target_locale, platform)
+      def translate_text(text, target_locale, platform, max_chars = nil)
         source_locale = @params[:master_locale]
         prompt = "Translate this text from #{source_locale} to #{target_locale}:\n#{text}"
 
-
-        # Add condition for Android platform
+        # Add platform-specific notes
         if platform == 'android'
-          prompt += "\n\nNote: The length of the translated text should be 500 symbols maximum. Rephrase a little if needed."
+          prompt += "\n\nNote: The translation should fit Android UI constraints, keeping the tone natural."
+        end
+
+        # Add max_chars constraint if provided
+        if max_chars
+          prompt += "\n\nIMPORTANT: The translation must not exceed #{max_chars} characters. Rephrase as necessary to meet this limit."
         end
 
         # Context handling
@@ -34,24 +38,28 @@ module Fastlane
         # Updated API call with max_tokens
         response = @client.chat(
           parameters: {
-            model: @params[:model_name] || 'gpt-4-1106-preview',
+            model: @params[:model_name] || 'gpt-4o',
             messages: [{ role: "user", content: prompt }],
             temperature: @params[:temperature] || 0.5
           }
         )
 
-      
+        # Handle errors or return translated text
         error = response.dig("error", "message")
         if error
           UI.error "Error translating text: #{error}"
           return nil
         else
           translated_text = response.dig("choices", 0, "message", "content").strip
+          if max_chars && translated_text.length > max_chars
+            UI.error "Translated text exceeds the max_chars limit (#{max_chars}). Truncating..."
+            translated_text = translated_text[0...max_chars].strip
+          end
           UI.message "Translated text: #{translated_text}"
           return translated_text
         end
       end
-      
+
       # Sleep for a specified number of seconds, displaying a progress bar
       def wait(seconds = @params[:request_timeout])
         sleep_time = 0
@@ -89,7 +97,7 @@ module Fastlane
         white:   37,
         reset:   0,
       }
-    
+
       def self.colorize(text, color)
         color_code = COLORS[color.to_sym]
         "\e[#{color_code}m#{text}\e[0m"
