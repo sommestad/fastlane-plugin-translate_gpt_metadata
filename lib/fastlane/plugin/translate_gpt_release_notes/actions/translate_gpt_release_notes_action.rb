@@ -54,7 +54,7 @@ module Fastlane
 
       def self.list_locales(base_directory)
         Dir.children(base_directory).select do |entry|
-          File.directory?(File.join(base_directory, entry)) && entry != 'review_information'
+          File.directory?(File.join(base_directory, entry)) && entry != 'review_information' && entry != 'default'
         end
       end
 
