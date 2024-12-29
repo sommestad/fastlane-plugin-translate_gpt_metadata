@@ -18,43 +18,58 @@ module Fastlane
       # Request a translation from the GPT API
       def translate_text(text, target_locale, platform, max_chars = nil)
         source_locale = @params[:master_locale]
-        prompt = "Translate this text from #{source_locale} to #{target_locale}:\n#{text}"
 
-        # Add platform-specific notes
-        if platform == 'android'
-          prompt += "\n\nNote: The translation should fit Android UI constraints, keeping the tone natural."
-        end
+        # Build the translation prompt
+        prompt = "# Your role\n"
+        prompt += "You are an expert translator specializing in localizing content for apps published on the Apple App Store. You have a deep understanding of cultural nuances and know how to adapt content creatively to fit the target audience and Apple's metadata guidelines.\n\n"
+        prompt += "# Your task\n"
+        prompt += "Translate or adapt the following text from #{source_locale} to #{target_locale}, creating a subtitle or suffix that fits the character limit while capturing the core message and appeal of the original:\n"
+        prompt += "**Source text:**\n"
+        prompt += "\"\"\"\n"
+        prompt += text
+        prompt += "\n\"\"\"\n\n"
 
-        # Add max_chars constraint if provided
-        if max_chars
-          prompt += "\n\nIMPORTANT: The translation must not exceed #{max_chars} characters. Rephrase as necessary to meet this limit."
-        end
-
-        # Context handling
+        # Add context if provided
         if @params[:context] && !@params[:context].empty?
-          prompt = "Context: #{@params[:context]}\n" + prompt
+          prompt += "## Context\n"
+          prompt += "\"\"\"\n"
+          prompt += @params[:context]
+          prompt += "\n\"\"\"\n\n"
         end
 
-        # Updated API call with max_tokens
+        # Add important guidelines
+        prompt += "# Important Guidelines:\n"
+        prompt += "* If the exact translation cannot fit within the character limit, adapt the subtitle creatively to ensure it is engaging, concise, and culturally relevant.\n"
+        prompt += "* Prioritize the app name ('Wisser') as the most important element, with a creative and appealing suffix or subtitle if space allows.\n"
+        prompt += "* The translation must not exceed **#{max_chars} characters** (including spaces).\n" if max_chars
+        prompt += "* Provide only the final adapted or translated text, strictly adhering to the character limit.\n\n"
+
+        # Print the constructed prompt for debugging
+        print prompt
+
+        # API call
         response = @client.chat(
           parameters: {
             model: @params[:model_name] || 'gpt-4o',
             messages: [{ role: "user", content: prompt }],
-            temperature: @params[:temperature] || 0.5
+            temperature: @params[:temperature] || 0.7 # Higher temperature for creative output
           }
         )
 
-        # Handle errors or return translated text
+        # Handle response
         error = response.dig("error", "message")
         if error
           UI.error "Error translating text: #{error}"
           return nil
         else
           translated_text = response.dig("choices", 0, "message", "content").strip
+
+          # Check if the translated text exceeds the max_chars limit
           if max_chars && translated_text.length > max_chars
-            UI.error "Translated text exceeds the max_chars limit (#{max_chars}). Truncating..."
-            translated_text = translated_text[0...max_chars].strip
+            UI.error "Translated text (\"#{translated_text}\") exceeds the max_chars limit (#{max_chars}). Retrying with more emphasis on brevity..."
+            return translate_text(text, target_locale, platform, max_chars)
           end
+
           UI.message "Translated text: #{translated_text}"
           return translated_text
         end
