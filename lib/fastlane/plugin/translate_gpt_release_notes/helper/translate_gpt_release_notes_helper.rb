@@ -16,35 +16,54 @@ module Fastlane
       end
 
       # Request a translation from the GPT API
-      def translate_text(text, target_locale, platform, max_chars = nil)
+      def translate_text(text, target_locale, platform, max_chars = nil, attempt = 1, previous_variants = [])
         source_locale = @params[:master_locale]
+        content_type = @params[:content_type]
+        app_name = @params[:app_name] if content_type == "name" || content_type == "subtitle" # Include app name where relevant
+        content_guidelines = ""
+
+        # Adjust guidelines based on the content type
+        case content_type
+        when "name"
+          content_guidelines += "* The translation must preserve the brand identity and appeal of the app name (#{app_name}).\n"
+          content_guidelines += "* Do not exceed **#{max_chars} characters**, including spaces.\n" if max_chars
+          content_guidelines += "* Avoid generic or overly descriptive terms; keep it unique and memorable.\n"
+        when "subtitle"
+          content_guidelines += "* Ensure the subtitle is engaging and clearly conveys the app's core value.\n"
+          content_guidelines += "* Modify or adapt creatively to fit the character limit.\n"
+          content_guidelines += "* Prioritize brevity and cultural relevance; do not exceed **#{max_chars} characters**, including spaces.\n" if max_chars
+          content_guidelines += "* Avoid the following variants, as they are too long: #{previous_variants.join(', ')}.\n" unless previous_variants.empty?
+        when "description"
+          content_guidelines += "* Maintain a clear, professional tone that explains the app's purpose and features.\n"
+          content_guidelines += "* Ensure the translation flows naturally and resonates with the target audience.\n"
+          content_guidelines += "* Adhere to the character or word limits where applicable.\n"
+        when "keywords"
+          content_guidelines += "* Provide a comma-separated list of culturally relevant and app-specific keywords without spaces around commas.\n"
+          content_guidelines += "* If the keywords exceed the character limit, prioritize the most relevant keywords and remove less important ones to fit.\n"
+        when "release_notes"
+          content_guidelines += "* Translate or adapt the release notes to highlight key updates in a concise, user-friendly manner.\n"
+          content_guidelines += "* Ensure the tone is approachable and aligned with the app's brand voice.\n"
+          content_guidelines += "* Keep the message clear and engaging while respecting any length constraints.\n"
+        else
+          content_guidelines += "* Follow general translation best practices and ensure the output is culturally relevant.\n"
+        end
 
         # Build the translation prompt
         prompt = "# Your role\n"
-        prompt += "You are an expert translator specializing in localizing content for apps published on the Apple App Store. You have a deep understanding of cultural nuances and know how to adapt content creatively to fit the target audience and Apple's metadata guidelines.\n\n"
+        prompt += "You are an expert translator specializing in localizing content for apps published on the Apple App Store. You understand the importance of cultural nuances and adapting content for the target audience while adhering to Apple's metadata guidelines.\n\n"
         prompt += "# Your task\n"
-        prompt += "Translate or adapt the following text from #{source_locale} to #{target_locale}, creating a subtitle or suffix that fits the character limit while capturing the core message and appeal of the original:\n"
+        prompt += "Translate or adapt the following #{content_type} from #{source_locale} to #{target_locale}:\n\n"
+
+        # Add source text
         prompt += "**Source text:**\n"
-        prompt += "\"\"\"\n"
-        prompt += text
-        prompt += "\n\"\"\"\n\n"
+        prompt += "\"\"\"\n#{text}\n\"\"\"\n\n"
 
-        # Add context if provided
-        if @params[:context] && !@params[:context].empty?
-          prompt += "## Context\n"
-          prompt += "\"\"\"\n"
-          prompt += @params[:context]
-          prompt += "\n\"\"\"\n\n"
-        end
-
-        # Add important guidelines
+        # Add content-specific guidelines
         prompt += "# Important Guidelines:\n"
-        prompt += "* If the exact translation cannot fit within the character limit, adapt the subtitle creatively to ensure it is engaging, concise, and culturally relevant.\n"
-        prompt += "* Prioritize the app name ('Wisser') as the most important element, with a creative and appealing suffix or subtitle if space allows.\n"
-        prompt += "* The translation must not exceed **#{max_chars} characters** (including spaces).\n" if max_chars
-        prompt += "* Provide only the final adapted or translated text, strictly adhering to the character limit.\n\n"
+        prompt += content_guidelines
+        prompt += "* Provide only the final translated or adapted text.\n\n"
 
-        # Print the constructed prompt for debugging
+        # Debugging: Print the constructed prompt
         print prompt
 
         # API call
@@ -52,7 +71,7 @@ module Fastlane
           parameters: {
             model: @params[:model_name] || 'gpt-4o',
             messages: [{ role: "user", content: prompt }],
-            temperature: @params[:temperature] || 0.7 # Higher temperature for creative output
+            temperature: @params[:temperature] || (content_type == "subtitle" ? 0.7 : 0.3) # Higher temperature for creative tasks
           }
         )
 
@@ -64,10 +83,23 @@ module Fastlane
         else
           translated_text = response.dig("choices", 0, "message", "content").strip
 
+          # Ensure the app name is preserved if provided and relevant
+          if content_type == "name" && app_name && !translated_text.start_with?(app_name)
+            translated_text = "#{app_name}: #{translated_text}"
+          end
+
           # Check if the translated text exceeds the max_chars limit
           if max_chars && translated_text.length > max_chars
-            UI.error "Translated text (\"#{translated_text}\") exceeds the max_chars limit (#{max_chars}). Retrying with more emphasis on brevity..."
-            return translate_text(text, target_locale, platform, max_chars)
+            if attempt >= 5
+              UI.important "Max attempts reached. Falling back to the original source text."
+              return text
+            end
+
+            # Add the current failed variant to the previous_variants list
+            previous_variants << translated_text
+
+            UI.error "Translated text (\"#{translated_text}\") exceeds the max_chars limit (#{max_chars}). Retrying... (Attempt #{attempt}/5)"
+            return translate_text(text, target_locale, platform, max_chars, attempt + 1, previous_variants)
           end
 
           UI.message "Translated text: #{translated_text}"

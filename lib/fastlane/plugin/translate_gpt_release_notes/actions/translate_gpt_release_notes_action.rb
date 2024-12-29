@@ -155,6 +155,20 @@ module Fastlane
             description: "Maximum character count for each translation",
             type: Integer,
             optional: true
+          ),
+          FastlaneCore::ConfigItem.new(
+            key: :content_type,
+            env_name: "GPT_CONTENT_TYPE",
+            description: "Content type",
+            type: String,
+            optional: false
+          ),
+          FastlaneCore::ConfigItem.new(
+            key: :app_name,
+            env_name: "GPT_APP_NAME",
+            description: "App name",
+            type: String,
+            optional: false
           )
         ]
       end
