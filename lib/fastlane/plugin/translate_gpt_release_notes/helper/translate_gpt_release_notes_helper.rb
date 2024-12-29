@@ -92,7 +92,7 @@ module Fastlane
           if max_chars && translated_text.length > max_chars
             if attempt >= 5
               UI.important "Max attempts reached. Falling back to the original source text."
-              return text
+              return text.gsub(/["']/, "").strip # Strip quotes and trim the source text
             end
 
             # Add the current failed variant to the previous_variants list
@@ -100,6 +100,12 @@ module Fastlane
 
             UI.error "Translated text (\"#{translated_text}\") exceeds the max_chars limit (#{max_chars}). Retrying... (Attempt #{attempt}/5)"
             return translate_text(text, target_locale, platform, max_chars, attempt + 1, previous_variants)
+          end
+
+          # Format the translated text for "name" and "subtitle" types
+          if %w[name subtitle].include?(content_type)
+            translated_text = translated_text.gsub(/["']/, "").strip
+
           end
 
           UI.message "Translated text: #{translated_text}"
