@@ -29,27 +29,35 @@ module Fastlane
           return
         end
 
-        # Compare last modification time with the last run time
-        if File.exist?(last_run_file) && File.exist?(master_file_path)
-          last_run_time = File.read(last_run_file).to_i
-          file_mod_time = File.mtime(master_file_path).to_i
-          if file_mod_time <= last_run_time
-            UI.message("No changes in source file (#{master_file_path}) detected, translation skipped.")
-            return
-          end
-        end
+        master_mod_time = File.mtime(master_file_path).to_i
 
-        helper = Helper::TranslateGptReleaseNotesHelper.new(params)
-        translated_texts = locales.each_with_object({}) do |locale, translations|
+        locales.each do |locale|
           next if locale == params[:master_locale] # Skip master locale
 
-          translations[locale] = helper.translate_text(master_texts, locale, params[:platform], params[:max_chars])
+          target_path = is_ios ? File.join(base_directory, locale) : File.join(base_directory, locale, 'changelogs')
+          target_file = File.join(target_path, params[:input_file])
+
+          # Skip locale if the translation file exists and is up-to-date
+          if File.exist?(target_file) && File.mtime(target_file).to_i >= master_mod_time
+            UI.message("Skipping up-to-date translation for locale: #{locale}")
+            next
+          end
+
+          UI.message("Translating for locale: #{locale}")
+          helper = Helper::TranslateGptReleaseNotesHelper.new(params)
+          translated_text = helper.translate_text(master_texts, locale, params[:platform], params[:max_chars])
+
+          # Ensure target path exists or create it
+          FileUtils.mkdir_p(target_path) unless Dir.exist?(target_path)
+
+          # Write the translated text immediately
+          File.write(target_file, translated_text)
+          UI.success("Successfully translated and wrote file for locale: #{locale}")
         end
 
-        update_translated_texts(base_directory, translated_texts, is_ios, params)
-
-        # Store the current time as the last run time
+        # Update the last run time
         File.write(last_run_file, Time.now.to_i)
+        UI.success("Translation completed successfully.")
       end
 
       def self.list_locales(base_directory)
@@ -76,24 +84,6 @@ module Fastlane
         end
 
         [File.read(file_path), file_path]
-      end
-
-      def self.highest_numbered_file(directory)
-        Dir[File.join(directory, '*.txt')].max_by { |f| File.basename(f, '.txt').to_i }.split('/').last
-      end
-
-      def self.update_translated_texts(base_directory, translated_texts, is_ios, params)
-        translated_texts.each do |locale, text|
-          next if locale == params[:master_locale] # Skip master locale
-
-          target_path = is_ios ? File.join(base_directory, locale) : File.join(base_directory, locale, 'changelogs')
-
-          # Ensure target path exists or create it
-          FileUtils.mkdir_p(target_path) unless Dir.exist?(target_path)
-
-          # Write the translated text to the file
-          File.write(File.join(target_path, params[:input_file]), text)
-        end
       end
 
       def self.description
@@ -165,19 +155,22 @@ module Fastlane
             description: "Maximum character count for each translation",
             type: Integer,
             optional: true
+          ),
+          FastlaneCore::ConfigItem.new(
+            key: :content_type,
+            env_name: "GPT_CONTENT_TYPE",
+            description: "Content type",
+            type: String,
+            optional: false
+          ),
+          FastlaneCore::ConfigItem.new(
+            key: :app_name,
+            env_name: "GPT_APP_NAME",
+            description: "App name",
+            type: String,
+            optional: false
           )
         ]
-      end
-
-      def self.output
-        [
-          ['LOCALES_TRANSLATED', 'List of locales to which translations were applied'],
-          ['MASTER_LOCALE', 'The master language/locale used as the source for translations']
-        ]
-      end
-
-      def self.return_value
-        nil
       end
 
       def self.authors
