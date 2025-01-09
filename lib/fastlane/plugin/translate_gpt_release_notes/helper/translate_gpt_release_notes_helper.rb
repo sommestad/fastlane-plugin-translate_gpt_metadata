@@ -64,7 +64,7 @@ module Fastlane
         prompt += "* Provide only the final translated or adapted text.\n\n"
 
         # Debugging: Print the constructed prompt
-        print prompt
+        #print prompt
 
         # API call
         response = @client.chat(
