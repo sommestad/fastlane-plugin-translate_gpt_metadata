@@ -63,9 +63,6 @@ module Fastlane
         prompt += content_guidelines
         prompt += "* Provide only the final translated or adapted text.\n\n"
 
-        # Debugging: Print the constructed prompt
-        #print prompt
-
         # API call
         response = @client.chat(
           parameters: {
@@ -82,6 +79,14 @@ module Fastlane
           return nil
         else
           translated_text = response.dig("choices", 0, "message", "content").strip
+
+          # **New Cleaning Step Starts Here**
+          # Remove leading and trailing triple quotes and any surrounding whitespace or newlines
+          translated_text = translated_text
+                              .gsub(/\A"""\s*/, '')   # Remove starting triple quotes and any whitespace/newlines after
+                              .gsub(/\s*"""\z/, '')   # Remove ending triple quotes and any whitespace/newlines before
+                              .strip                   # Remove any remaining leading/trailing whitespace
+          # **New Cleaning Step Ends Here**
 
           # Ensure the app name is preserved if provided and relevant
           if content_type == "name" && app_name && !translated_text.start_with?(app_name)
@@ -105,7 +110,6 @@ module Fastlane
           # Format the translated text for "name" and "subtitle" types
           if %w[name subtitle].include?(content_type)
             translated_text = translated_text.gsub(/["']/, "").strip
-
           end
 
           UI.message "Translated text: #{translated_text}"
