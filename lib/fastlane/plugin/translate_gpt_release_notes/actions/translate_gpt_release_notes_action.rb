@@ -37,8 +37,8 @@ module Fastlane
           target_path = is_ios ? File.join(base_directory, locale) : File.join(base_directory, locale, 'changelogs')
           target_file = File.join(target_path, params[:input_file])
 
-          # Skip locale if the translation file exists and is up-to-date
-          if File.exist?(target_file) && File.mtime(target_file).to_i >= master_mod_time
+          # Skip locale if the translation file exists and is up-to-date, unless force_translate is true
+          if File.exist?(target_file) && File.mtime(target_file).to_i >= master_mod_time && !params[:force_translate]
             UI.message("Skipping up-to-date translation for locale: #{locale}")
             next
           end
@@ -169,6 +169,15 @@ module Fastlane
             description: "App name",
             type: String,
             optional: false
+          ),
+          # New option for forcing translation
+          FastlaneCore::ConfigItem.new(
+            key: :force_translate,
+            env_name: "FORCE_TRANSLATE",
+            description: "Force translation regardless of the last run status",
+            is_string: false,
+            type: Boolean,
+            default_value: false
           )
         ]
       end
